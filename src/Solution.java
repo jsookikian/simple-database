@@ -16,8 +16,6 @@ public class Solution {
     private final static int INVALID = 0;
     private final static int TRANSACTION_COMMAND = 1;
     private final static int DATA_COMMAND = 2;
-    private final static int END_COMMAND = 3;
-
 
     class Database {
 
@@ -28,9 +26,13 @@ public class Solution {
             blocks = new LinkedList<TransactionBlock>();
         }
 
+        // Public function to run the private evaluateCommand function
+        public void runCommand(String command) {
+            evaluateCommand(command);
+        }
 
         // Parses the command and evaluate its type.
-        public int parseInput(String input) {
+        private int parseInput(String input) {
             // Parse the command by whitespace
             String[] cmd = input.split("\\s+");
 
@@ -77,13 +79,12 @@ public class Solution {
 
         }
 
-
         /*
             This function is what the raw input is passed to.
             It validates the input, and then selects the correct function
             To pass it on to.
          */
-        public void evaluateCommand(String command) {
+        private void evaluateCommand(String command) {
             // Parse input to figure out what type it is (INVALID, DATA_COMMAND, OR TRANSACTION_COMMAND)
             int inputType = parseInput(command);
 
@@ -112,9 +113,8 @@ public class Solution {
             }
         }
 
-
         // Command will be a transaction block specific command
-        public void TransactionCommand(String command) {
+        private void TransactionCommand(String command) {
             switch (command) {
                 // Run begin command
                 case "BEGIN":
@@ -132,14 +132,14 @@ public class Solution {
             }
         }
         // Add the data command to the most recent Transaction Block's cache
-        public void AddTransaction(String command) {
+        private void AddTransaction(String command) {
             blocks.getLast().addToCache(command);
         }
 
         /*
             Execute the data command on the database.
          */
-        public void executeDataCommand(String command) {
+        private void executeDataCommand(String command) {
             String[] cmd = command.split("\\s+");
 
             // If the command is too long, too short, or not a valid command string, it is invalid input.
@@ -175,7 +175,6 @@ public class Solution {
                 cmd[1] = Entry name
                 cmd[2] = Entry value
              */
-
             else if (cmd.length == 3) {
                 if (cmd[0].equals("SET") && isValidNumberString(cmd[2])) {
                     set(cmd[1], Double.parseDouble(cmd[2]));
@@ -198,7 +197,7 @@ public class Solution {
 
         // Check if the number inputted is in fact a number.
         private boolean isValidNumberString(String value) {
-            // Double.parseDouble throws a NumberFormatException is the string is not a numerical string.
+            // Double.parseDouble throws a NumberFormatException if the string is not a numerical string.
             try {
                 Double.parseDouble(value);
                 return true;
@@ -222,24 +221,28 @@ public class Solution {
         }
 
         // Remove item from database
+        // Runtime: O(1)
         private void unset(String name) {
             entries.remove(name);
         }
 
         /*
             Find the number of items equal to the value
+
             Runtime: O(n)
          */
         private int numEqualTo(Double value) {
             // Return value that keeps track of the number of matched entries
             int count = 0;
-
+            /*
+                Iterate through all values in the database.
+                If a match is found, increment the count.
+            */
             for (Map.Entry<String, Double> entry : entries.entrySet()) {
                 if (entry.getValue().equals(value)) {
                     count += 1;
                 }
             }
-
             return count;
         }
 
@@ -253,7 +256,7 @@ public class Solution {
             Transaction blocks can be nested; a BEGIN can be issued inside of an existing block
 
             Runtime: O(1)
-         */
+        */
         private void begin() {
             // If there are no transactions, create a new Transaction Block
             if (blocks.isEmpty()) {
@@ -328,7 +331,7 @@ public class Solution {
         Solution sol = new Solution();
         Solution.Database db = sol.new Database();
         while (input.hasNext()) {
-            db.evaluateCommand(input.nextLine());
+            db.runCommand(input.nextLine());
 
         }
         
