@@ -77,23 +77,36 @@ public class Solution {
 
         }
 
+
+        /*
+            This function is what the raw input is passed to.
+            It validates the input, and then selects the correct function
+            To pass it on to.
+         */
         public void evaluateCommand(String command) {
             // Parse input to figure out what type it is (INVALID, DATA_COMMAND, OR TRANSACTION_COMMAND)
             int inputType = parseInput(command);
+
             // Print INVALID if it is not valid input
             if (inputType == INVALID) {
                 System.out.println("INVALID COMMAND");
             }
-            // If a transaction has started and a data command is entered, cache the data command
-            // in the most recent transaction block
+            /*
+                If a transaction has started and a data command is entered, cache the data command
+                in the most recent transaction block
+            */
             else if (!blocks.isEmpty() && inputType == DATA_COMMAND) {
                 AddTransaction(command);
             }
-            // If it is a transaction command, execute it.
+            /*
+                If it is a transaction command, execute it.
+            */
             else if (inputType == TRANSACTION_COMMAND) {
                 TransactionCommand(command);
             }
-            // Since there are no transaction blocks, the data command can be committed immediately
+            /*
+                Since there are no transaction blocks, the data command can be committed immediately
+            */
             else {
                 executeDataCommand(command);
             }
@@ -123,7 +136,9 @@ public class Solution {
             blocks.getLast().addToCache(command);
         }
 
-
+        /*
+            Execute the data command on the database.
+         */
         public void executeDataCommand(String command) {
             String[] cmd = command.split("\\s+");
 
@@ -135,20 +150,34 @@ public class Solution {
             else if (cmd.length == 2) {
                 switch(cmd[0]) {
                     case "GET":
+                        // Fetch the variable's value from the database and print it out.
                         System.out.println(get(cmd[1]));
                         break;
                     case "UNSET":
+                        // Remove the variable from the database.
                         unset(cmd[1]);
                         break;
+                        // Count how many entries in the database match the requested value and print it out.
                     case "NUMEQUALTO":
-                        System.out.println(numEqualTo(Double.parseDouble(cmd[1])));
+                        if (!isValidNumberString(cmd[1])) {
+                            System.out.println("INVALID INPUT");
+                        }
+                        else {
+                            System.out.println(numEqualTo(Double.parseDouble(cmd[1])));
+                        }
                         break;
                     default:
                         System.out.println("INVALID INPUT");
                 }
             }
+            /* The command will have the following syntax:
+                cmd[0] = SET
+                cmd[1] = Entry name
+                cmd[2] = Entry value
+             */
+
             else if (cmd.length == 3) {
-                if (cmd[0].equals("SET")) {
+                if (cmd[0].equals("SET") && isValidNumberString(cmd[2])) {
                     set(cmd[1], Double.parseDouble(cmd[2]));
                 }
             }
@@ -166,21 +195,21 @@ public class Solution {
             return valid;
 
         }
-/*
+
+        // Check if the number inputted is in fact a number.
         private boolean isValidNumberString(String value) {
-            boolean valid = false;
+            // Double.parseDouble throws a NumberFormatException is the string is not a numerical string.
             try {
-
+                Double.parseDouble(value);
+                return true;
             }
-            catch () NumberFormatException e) {
-
-            }
-            finally {
-                return valid;
+            // Catch the NumberFormatException from the invalid input, and return false.
+            catch (NumberFormatException e) {
+                return false;
             }
         }
 
-*/      // Add the data to the database entries.
+        // Add the data to the database entries.
         // Runtime: O(1)
         private void set(String name, Double value) {
             entries.put(name, value);
