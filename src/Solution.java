@@ -8,237 +8,316 @@ import java.math.*;
 import java.util.regex.*;
 
 public class Solution {
-    private HashMap<String, Double> entries; // Variable for Database entries
-    private LinkedList<TransactionBlock> blocks; // Transaction Blocks pointer
-    // A list of valid commands
-    private final static String[] validCommands =  {"SET", "GET", "UNSET", "NUMEQUALTO", "BEGIN", "ROLLBACK", "COMMIT", "END"};
+    private enum COMMAND_TYPE {
+        DATA_COMMAND, TRANSACTION_COMMAND, END_COMMAND
+    }
 
-    private final static int INVALID = 0;
-    private final static int TRANSACTION_COMMAND = 1;
-    private final static int DATA_COMMAND = 2;
+    private enum COMMAND_NAME {
+        SET, GET, UNSET, NUMEQUALTO, BEGIN, ROLLBACK, COMMIT, END
+    }
 
-    class Database {
+    class Runner {
+        private Scanner input;
+        private Command currentCommand;
+        private Parser parser;
+        private Database db;
 
-        // Database Constructor.
-        // Initialize database entries hashmap and Transaction Block list
-        public Database() {
-            entries = new HashMap<String, Double>();
-            blocks = new LinkedList<TransactionBlock>();
+        public Runner() {
+            this.input = new Scanner(System.in);
+            this.parser = new Parser();
+            this.db = new Database();
+            this.currentCommand = null;
         }
 
-        // Public function to run the private evaluateCommand function
-        public void runCommand(String command) {
-            evaluateCommand(command);
-        }
-
-        // Parses the command and evaluate its type.
-        private int parseInput(String input) {
-            // Parse the command by whitespace
-            String[] cmd = input.split("\\s+");
-
-            // If the command is too long, too short, or not a valid command string, it is invalid input.
-            if (cmd.length == 0 || cmd.length > 3 || !isValidCommandString(cmd[0])) {
-                return INVALID;
+        // Return a command object with the current command info
+        private Command validateInput(String input) {
+            try {
+                return parser.parseInput(input);
             }
-
-            // If the command is a transaction block specific command
-            else if (cmd.length == 1) {
-                switch (cmd[0]) {
-                    // Transaction Commands
-                    case "BEGIN":
-                    case "ROLLBACK":
-                    case "COMMIT":
-                        return TRANSACTION_COMMAND;
-                    // End the Program
-                    case "END":
-                        end();
-                    default:
-                        return INVALID;
-                }
-            }
-
-            // Command will be a GET, UNSET, or NUMEQUALTO command if it is valid.
-            else if (cmd.length == 2) {
-                switch(cmd[0]) {
-                    case "GET":
-                    case "UNSET":
-                    case "NUMEQUALTO":
-                        return DATA_COMMAND;
-                    default:
-                        return INVALID;
-                }
-            }
-            // The command will be a SET command.
-            else if (cmd.length == 3) {
-                if (cmd[0].equals("SET")) {
-                    return DATA_COMMAND;
-                }
-            }
-
-            return INVALID;
-
-        }
-
-        /*
-            This function is what the raw input is passed to.
-            It validates the input, and then selects the correct function
-            To pass it on to.
-         */
-        private void evaluateCommand(String command) {
-            // Parse input to figure out what type it is (INVALID, DATA_COMMAND, OR TRANSACTION_COMMAND)
-            int inputType = parseInput(command);
-
-            // Print INVALID if it is not valid input
-            if (inputType == INVALID) {
-                System.out.println("INVALID COMMAND");
-            }
-            /*
-                If a transaction has started and a data command is entered, cache the data command
-                in the most recent transaction block
-            */
-            else if (!blocks.isEmpty() && inputType == DATA_COMMAND) {
-                AddTransaction(command);
-            }
-            /*
-                If it is a transaction command, execute it.
-            */
-            else if (inputType == TRANSACTION_COMMAND) {
-                TransactionCommand(command);
-            }
-            /*
-                Since there are no transaction blocks, the data command can be committed immediately
-            */
-            else {
-                executeDataCommand(command);
+            catch (InvalidCommandException e){
+                return null;
             }
         }
 
-        // Command will be a transaction block specific command
-        private void TransactionCommand(String command) {
-            switch (command) {
+
+        private void evaluateCommand(Command cmd) {
+            switch (cmd.type) {
+                case DATA_COMMAND:
+                    executeDataCommand(cmd);
+                    break;
+                case TRANSACTION_COMMAND:
+                    executeTransactionCommand(cmd);
+                    break;
+                case END_COMMAND:
+                    db.end();
+                    break;
+            }
+        }
+
+        private void executeTransactionCommand(Command cmd) {
+            switch (cmd.name) {
                 // Run begin command
-                case "BEGIN":
-                    begin();
+                case BEGIN:
+                    db.begin();
                     break;
                 // Run rollback command
-                case "ROLLBACK":
-                    rollback();
+                case ROLLBACK:
+                    if (!db.rollback()) {
+                        System.out.println("> NO TRANSACTION");
+                    }
                     break;
                 // Run Commit command
-                case "COMMIT":
-                    commit();
+                case COMMIT:
+                    if (!db.commit()) {
+                        System.out.println("> NO TRANSACTION");
+                    }
                     break;
                 default:
             }
         }
-        // Add the data command to the most recent Transaction Block's cache
-        private void AddTransaction(String command) {
-            blocks.getLast().addToCache(command);
-        }
 
-        /*
-            Execute the data command on the database.
-         */
-        private void executeDataCommand(String command) {
-            String[] cmd = command.split("\\s+");
+        private void executeDataCommand(Command cmd) {
+            boolean rtnVal;
+            if (db.transactionInProgress()) {
+                db.AddTransaction(cmd);
+                //Exit function after transaction is added
+                return;
+            }
 
-            // If the command is too long, too short, or not a valid command string, it is invalid input.
-            if (cmd.length == 0 || cmd.length > 3 || !isValidCommandString(cmd[0])) {
-                System.out.println("INVALID INPUT");
-            }
-            // Command will be a GET, UNSET, or NUMEQUALTO command.
-            else if (cmd.length == 2) {
-                switch(cmd[0]) {
-                    case "GET":
-                        // Fetch the variable's value from the database and print it out.
-                        System.out.println(get(cmd[1]));
-                        break;
-                    case "UNSET":
-                        // Remove the variable from the database.
-                        unset(cmd[1]);
-                        break;
-                        // Count how many entries in the database match the requested value and print it out.
-                    case "NUMEQUALTO":
-                        if (!isValidNumberString(cmd[1])) {
-                            System.out.println("INVALID INPUT");
-                        }
-                        else {
-                            System.out.println(numEqualTo(Double.parseDouble(cmd[1])));
-                        }
-                        break;
-                    default:
-                        System.out.println("INVALID INPUT");
-                }
-            }
-            /* The command will have the following syntax:
-                cmd[0] = SET
-                cmd[1] = Entry name
-                cmd[2] = Entry value
-             */
-            else if (cmd.length == 3) {
-                if (cmd[0].equals("SET") && isValidNumberString(cmd[2])) {
-                    set(cmd[1], Double.parseDouble(cmd[2]));
-                }
-            }
-        }
-
-        // Check if the command matches a valid command string.
-        private boolean isValidCommandString(String cmd) {
-            boolean valid = false;
-            for (int i = 0; i < validCommands.length; i++) {
-                if (cmd.equals(validCommands[i])) {
-                    valid = true;
+            switch(cmd.name) {
+                case GET:
+                    String value = db.get(cmd.arg1);
+                    // Check the value returned from the database
+                    if (value == null) {
+                        System.out.println("> NULL");
+                    }
+                    else {
+                        System.out.println("> " + value);
+                    }
                     break;
+                case UNSET:
+                    rtnVal = db.unset(cmd.arg1);
+                    // Check if the UNSET operation was successful
+                    if (rtnVal == false) {
+                        System.out.println("Operation Unsuccessful");
+                    }
+                    break;
+                case NUMEQUALTO:
+                    int equalTo =  db.numEqualTo(cmd.arg1);
+                    System.out.println("> " + equalTo);
+                    break;
+                case SET:
+                    rtnVal = db.set(cmd.arg1, cmd.arg2);
+                    // Check if the SET operation was successful
+                    if (rtnVal == false) {
+                        System.out.println("Operation Unsuccessful");
+                    }
+                    break;
+            }
+        }
+
+        public void run() {
+            Command currentCommand;
+            String commandStr;
+
+            while (true) {
+                commandStr = input.nextLine();
+                currentCommand = validateInput(commandStr);
+                // If it is a valid command
+                if (currentCommand != null) {
+                    System.out.println(commandStr);
+                    evaluateCommand(currentCommand);
+                }
+                else {
+                    System.out.println("INVALID COMMAND");
                 }
             }
-            return valid;
+        }
+    }
+
+    class Parser {
+        private Command parseInput(String input) throws InvalidCommandException {
+            String[] cmd = input.split("\\s+");
+            COMMAND_NAME name;
+            COMMAND_TYPE type;
+            if (!isCommandString(cmd[0])) {
+                throw new InvalidCommandException();
+            }
+
+            if (isEndProgramCommand(cmd[0])) {
+                return new Command(COMMAND_NAME.END, COMMAND_TYPE.END_COMMAND, null, null);
+            }
+
+            if (isTransactionCommand(cmd[0])) {
+                name = getTransactionCommandName(cmd[0]);
+                type = COMMAND_TYPE.TRANSACTION_COMMAND;
+
+                return new Command(name, type, null, null);
+            }
+
+            // We can assume the command is a data command at this point
+            type = COMMAND_TYPE.DATA_COMMAND;
+            name = getDataCommandName(cmd[0]);
+            switch(name) {
+                case SET:
+                    if (cmd.length >= 3) {
+                        // SET [name] [value]
+                        return new Command(name, type, cmd[1], cmd[2]);
+                    }
+                    else {
+                        throw new InvalidCommandException();
+                    }
+                // Both cases follow the same rules: [command] [name]
+                case GET:
+                case UNSET:
+                    if (cmd.length >= 2) {
+                        // UNSET [name]
+                        // GET [name]
+                        return new Command(name, type, cmd[1], null);
+                    }
+                    else {
+                        throw new InvalidCommandException();
+                    }
+                case NUMEQUALTO:
+                    if (cmd.length >= 2) {
+                        // NUMEQUALTO [value]
+                        return new Command(name, type, cmd[1], null);
+                    }
+                    else {
+                        throw new InvalidCommandException();
+                    }
+            }
+            return null;
 
         }
 
-        // Check if the number inputted is in fact a number.
-        private boolean isValidNumberString(String value) {
-            // Double.parseDouble throws a NumberFormatException if the string is not a numerical string.
+        private boolean isCommandString(String command) {
+            return command.matches("\\b(SET|GET|UNSET|NUMEQUALTO|BEGIN|ROLLBACK|COMMIT|END)\\b");
+        }
+
+        private boolean isDataCommand(String command) {
+            return command.matches("\\b(SET|GET|UNSET|NUMEQUALTO)\\b");
+        }
+
+        private boolean isTransactionCommand(String command) {
+            return command.matches("\\b(BEGIN|ROLLBACK|COMMIT)\\b");
+        }
+
+        private boolean isEndProgramCommand(String command) {
+            return command.matches("\\b(END)\\b");
+        }
+
+        // Returns the enum value for the name of the command
+        private COMMAND_NAME getTransactionCommandName(String command) {
+            if (command.equals("BEGIN")) {
+                return COMMAND_NAME.BEGIN;
+            }
+            else if (command.equals("ROLLBACK")) {
+                return COMMAND_NAME.ROLLBACK;
+            }
+            else {
+                return COMMAND_NAME.COMMIT;
+            }
+        }
+
+        // Returns the enum value for the name of the command
+        private COMMAND_NAME getDataCommandName(String command) {
+            if (command.equals("SET")) {
+                return COMMAND_NAME.SET;
+            }
+            else if (command.equals("GET")) {
+                return COMMAND_NAME.GET;
+            }
+            else if (command.equals("UNSET")) {
+                return COMMAND_NAME.UNSET;
+            }
+            else {
+                return COMMAND_NAME.NUMEQUALTO;
+            }
+        }
+
+
+
+
+    }
+
+    class Database {
+
+        private HashMap<String, String> entries; // Variable for Database entries
+        private LinkedList<TransactionBlock> blocks; // Transaction Blocks pointer
+
+        // Initialize database entries hashmap and Transaction Block list
+        public Database() {
+            entries = new HashMap<String, String>();
+            blocks = new LinkedList<TransactionBlock>();
+        }
+
+        public boolean transactionInProgress() {
+            return !blocks.isEmpty();
+        }
+
+        // Add the data command to the most recent Transaction Block's cache
+        private boolean AddTransaction(Command command) {
+            return blocks.getLast().addToCache(command);
+        }
+
+        // Execute the commands from the cache, without printing out the values.
+        private void executeCacheCommand(Command cmd) {
+            switch(cmd.name) {
+                case GET:
+                    get(cmd.arg1);
+                    break;
+                case UNSET:
+                    unset(cmd.arg1);
+                    break;
+                case NUMEQUALTO:
+                    numEqualTo(cmd.arg1);
+                    break;
+                case SET:
+                    set(cmd.arg1, cmd.arg2);
+                    break;
+            }
+        }
+
+
+        // Add the data to the database entries.
+        private boolean set(String name, String value) {
             try {
-                Double.parseDouble(value);
+                entries.put(name, value);
                 return true;
             }
-            // Catch the NumberFormatException from the invalid input, and return false.
-            catch (NumberFormatException e) {
+            catch (Exception e) {
                 return false;
             }
         }
 
-        // Add the data to the database entries.
-        // Runtime: O(1)
-        private void set(String name, Double value) {
-            entries.put(name, value);
-        }
-
         // Get the value of the key from the database
-        // Runtime: O(1)
-        private Double get(String name) {
+        private String get(String name) {
             return entries.get(name);
         }
 
         // Remove item from database
-        // Runtime: O(1)
-        private void unset(String name) {
-            entries.remove(name);
+        private boolean unset(String name) {
+            try {
+                entries.remove(name);
+                return true;
+            }
+            catch (Exception e) {
+                return false;
+            }
+
         }
 
-        /*
-            Find the number of items equal to the value
 
-            Runtime: O(n)
-         */
-        private int numEqualTo(Double value) {
+        // Find the number of items equal to the value
+        private int numEqualTo(String value) {
             // Return value that keeps track of the number of matched entries
             int count = 0;
             /*
                 Iterate through all values in the database.
                 If a match is found, increment the count.
             */
-            for (Map.Entry<String, Double> entry : entries.entrySet()) {
+            for (Map.Entry<String, String> entry : entries.entrySet()) {
                 if (entry.getValue().equals(value)) {
                     count += 1;
                 }
@@ -257,14 +336,21 @@ public class Solution {
 
             Runtime: O(1)
         */
-        private void begin() {
+        private boolean begin() {
             // If there are no transactions, create a new Transaction Block
-            if (blocks.isEmpty()) {
-                blocks.add(new TransactionBlock());
+            try {
+                if (blocks.isEmpty()) {
+                    blocks.add(new TransactionBlock());
+                }
+                // Else, add a new transaction block to the end
+                else {
+                    blocks.addLast(new TransactionBlock());
+                }
+                return true;
             }
-            // Else, add a new transaction block to the end
-            else {
-                blocks.addLast(new TransactionBlock());
+            // If any operation was unsuccessful, return false
+            catch (Exception E) {
+                return false;
             }
         }
 
@@ -277,10 +363,10 @@ public class Solution {
 
                     -> O(n * m)
         */
-        private void commit() {
+        private boolean commit() {
             // Check if there are any Transaction blocks
             if (blocks.isEmpty()) {
-                System.out.println("NO TRANSACTION");
+                return false;
             }
             // Traverse the Transaction Blocks from first to last
             // Execute each command in its cache as you go (input has already been validated)
@@ -289,11 +375,12 @@ public class Solution {
                     TransactionBlock curBlock = blocks.getFirst();
                     int curBlockCacheSize = curBlock.cache.size();
                     for (int i = 0; i < curBlockCacheSize; i++) {
-                        String curCommand = curBlock.cache.get(i);
-                        executeDataCommand(curCommand);
+                        Command curCommand = curBlock.cache.get(i);
+                        executeCacheCommand(curCommand);
                     }
                     blocks.removeFirst();
                 }
+                return true;
             }
 
         }
@@ -302,38 +389,69 @@ public class Solution {
             Undo all of the commands issued in the most recent transaction block, and close the block.
             Print nothing if successful, or print "NO TRANSACTION" if no transaction is in progress.
          */
-        private void rollback() {
+        private boolean rollback() {
+            // If there are no transactions in progress, return false
             if (blocks.isEmpty()) {
-                System.out.println("NO TRANSACTION");
+                return false;
             }
+            // Else, remove most recent transaction block
             else {
                 blocks.removeLast();
+                return true;
             }
         }
     }
 
     // A class for the transaction blocks.
     class TransactionBlock {
-        private ArrayList<String> cache;
+        private ArrayList<Command> cache;
 
         public TransactionBlock() {
             cache = new ArrayList<>();
         }
 
-        public void addToCache(String command) {
-            cache.add(command);
+        public boolean addToCache(Command command) {
+            try {
+                cache.add(command);
+                return true;
+            }
+            catch (Exception e) {
+                return false;
+            }
         }
     }
 
+    class Command {
+        public COMMAND_NAME name; //
+        public COMMAND_TYPE type; // Transaction, Data, or End command
+        public String arg1; // First argument for the command
+        public String arg2; // Second argument for the command
+
+
+        public Command(COMMAND_NAME name, COMMAND_TYPE type, String arg1, String arg2) {
+            this.name = name;
+            this.type = type;
+            this.arg1 = arg1;
+            this.arg2 = arg2;
+        }
+    }
+
+    class InvalidCommandException extends Exception {
+        public InvalidCommandException() {
+        }
+
+        public InvalidCommandException(String message) {
+            super(message);
+        }
+    }
 
     public static void main(String args[] ) throws Exception {
         Scanner input = new Scanner(System.in);
         Solution sol = new Solution();
-        Solution.Database db = sol.new Database();
-        while (input.hasNext()) {
-            db.runCommand(input.nextLine());
+        Solution.Runner r = sol.new Runner();
 
-        }
-        
+        r.run();
+
+
     }
 }
