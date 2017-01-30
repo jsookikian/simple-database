@@ -29,6 +29,30 @@ public class Solution {
             this.currentCommand = null;
         }
 
+        // Main function that controls program flow. Called from main
+        public void run() {
+            Command currentCommand;
+            String commandStr;
+
+            // Program will run until END command is entered.
+            while (true) {
+                // Grab the first line of input
+                commandStr = input.nextLine();
+
+                // Check that it is a valid command
+                currentCommand = validateInput(commandStr);
+
+                // If it is a valid command, execute it.
+                if (currentCommand != null) {
+                    System.out.println(commandStr);
+                    evaluateCommand(currentCommand);
+                }
+                else {
+                    System.out.println("INVALID COMMAND");
+                }
+            }
+        }
+
         // Return a command object with the current command info
         private Command validateInput(String input) {
             try {
@@ -38,7 +62,6 @@ public class Solution {
                 return null;
             }
         }
-
 
         private void evaluateCommand(Command cmd) {
             switch (cmd.type) {
@@ -115,28 +138,11 @@ public class Solution {
                     break;
             }
         }
-
-        public void run() {
-            Command currentCommand;
-            String commandStr;
-
-            while (true) {
-                commandStr = input.nextLine();
-                currentCommand = validateInput(commandStr);
-                // If it is a valid command
-                if (currentCommand != null) {
-                    System.out.println(commandStr);
-                    evaluateCommand(currentCommand);
-                }
-                else {
-                    System.out.println("INVALID COMMAND");
-                }
-            }
-        }
     }
 
     class Parser {
-        private Command parseInput(String input) throws InvalidCommandException {
+
+        public Command parseInput(String input) throws InvalidCommandException {
             String[] cmd = input.split("\\s+");
             COMMAND_NAME name;
             COMMAND_TYPE type;
@@ -156,8 +162,20 @@ public class Solution {
             }
 
             // We can assume the command is a data command at this point
-            type = COMMAND_TYPE.DATA_COMMAND;
-            name = getDataCommandName(cmd[0]);
+            Command toReturn = parseDataCommand(cmd);
+            if (toReturn == null) {
+                throw new InvalidCommandException();
+            }
+            else {
+                return toReturn;
+
+            }
+
+        }
+
+        private Command parseDataCommand(String[] cmd) {
+            COMMAND_TYPE type = COMMAND_TYPE.DATA_COMMAND;
+            COMMAND_NAME name = getDataCommandName(cmd[0]);
             switch(name) {
                 case SET:
                     if (cmd.length >= 3) {
@@ -165,9 +183,9 @@ public class Solution {
                         return new Command(name, type, cmd[1], cmd[2]);
                     }
                     else {
-                        throw new InvalidCommandException();
+                        return null;
                     }
-                // Both cases follow the same rules: [command] [name]
+                    // Both cases follow the same rules: [command] [name]
                 case GET:
                 case UNSET:
                     if (cmd.length >= 2) {
@@ -176,7 +194,7 @@ public class Solution {
                         return new Command(name, type, cmd[1], null);
                     }
                     else {
-                        throw new InvalidCommandException();
+                        return null;
                     }
                 case NUMEQUALTO:
                     if (cmd.length >= 2) {
@@ -184,11 +202,9 @@ public class Solution {
                         return new Command(name, type, cmd[1], null);
                     }
                     else {
-                        throw new InvalidCommandException();
+                        return null;
                     }
             }
-            return null;
-
         }
 
         private boolean isCommandString(String command) {
@@ -235,10 +251,6 @@ public class Solution {
                 return COMMAND_NAME.NUMEQUALTO;
             }
         }
-
-
-
-
     }
 
     class Database {
