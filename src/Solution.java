@@ -16,130 +16,8 @@ public class Solution {
         SET, GET, UNSET, NUMEQUALTO, BEGIN, ROLLBACK, COMMIT, END
     }
 
-    class Runner {
-        private Scanner input;
-        private Command currentCommand;
-        private Parser parser;
-        private Database db;
-
-        public Runner() {
-            this.input = new Scanner(System.in);
-            this.parser = new Parser();
-            this.db = new Database();
-            this.currentCommand = null;
-        }
-
-        // Main function that controls program flow. Called from main
-        public void run() {
-            Command currentCommand;
-            String commandStr;
-
-            // Program will run until END command is entered.
-            while (true) {
-                // Grab the first line of input
-                commandStr = input.nextLine();
-
-                // Check that it is a valid command
-                currentCommand = validateInput(commandStr);
-
-                // If it is a valid command, execute it.
-                if (currentCommand != null) {
-                    System.out.println(commandStr);
-                    evaluateCommand(currentCommand);
-                }
-                else {
-                    System.out.println("INVALID COMMAND");
-                }
-            }
-        }
-
-        // Return a command object with the current command info
-        private Command validateInput(String input) {
-            try {
-                return parser.parseInput(input);
-            }
-            catch (InvalidCommandException e){
-                return null;
-            }
-        }
-
-        private void evaluateCommand(Command cmd) {
-            switch (cmd.type) {
-                case DATA_COMMAND:
-                    executeDataCommand(cmd);
-                    break;
-                case TRANSACTION_COMMAND:
-                    executeTransactionCommand(cmd);
-                    break;
-                case END_COMMAND:
-                    db.end();
-                    break;
-            }
-        }
-
-        private void executeTransactionCommand(Command cmd) {
-            switch (cmd.name) {
-                // Run begin command
-                case BEGIN:
-                    db.begin();
-                    break;
-                // Run rollback command
-                case ROLLBACK:
-                    if (!db.rollback()) {
-                        System.out.println("> NO TRANSACTION");
-                    }
-                    break;
-                // Run Commit command
-                case COMMIT:
-                    if (!db.commit()) {
-                        System.out.println("> NO TRANSACTION");
-                    }
-                    break;
-                default:
-            }
-        }
-
-        private void executeDataCommand(Command cmd) {
-            boolean rtnVal;
-            if (db.transactionInProgress()) {
-                db.AddTransaction(cmd);
-                //Exit function after transaction is added
-                return;
-            }
-
-            switch(cmd.name) {
-                case GET:
-                    String value = db.get(cmd.arg1);
-                    // Check the value returned from the database
-                    if (value == null) {
-                        System.out.println("> NULL");
-                    }
-                    else {
-                        System.out.println("> " + value);
-                    }
-                    break;
-                case UNSET:
-                    rtnVal = db.unset(cmd.arg1);
-                    // Check if the UNSET operation was successful
-                    if (rtnVal == false) {
-                        System.out.println("Operation Unsuccessful");
-                    }
-                    break;
-                case NUMEQUALTO:
-                    int equalTo =  db.numEqualTo(cmd.arg1);
-                    System.out.println("> " + equalTo);
-                    break;
-                case SET:
-                    rtnVal = db.set(cmd.arg1, cmd.arg2);
-                    // Check if the SET operation was successful
-                    if (rtnVal == false) {
-                        System.out.println("Operation Unsuccessful");
-                    }
-                    break;
-            }
-        }
-    }
-
+    private final static boolean PRINT_ON = true;
+    private final static boolean PRINT_OFF = false;
     class Parser {
 
         public Command parseInput(String input) throws InvalidCommandException {
@@ -204,6 +82,8 @@ public class Solution {
                     else {
                         return null;
                     }
+                default:
+                    return null;
             }
         }
 
@@ -257,11 +137,95 @@ public class Solution {
 
         private HashMap<String, String> entries; // Variable for Database entries
         private LinkedList<TransactionBlock> blocks; // Transaction Blocks pointer
+        private Parser parser;
 
         // Initialize database entries hashmap and Transaction Block list
         public Database() {
             entries = new HashMap<String, String>();
             blocks = new LinkedList<TransactionBlock>();
+            parser = new Parser();
+        }
+
+
+        private void evaluateCommand(String input) {
+            try {
+                Command cmd = parser.parseInput(input);
+                System.out.println(input);
+                switch (cmd.type) {
+                    case DATA_COMMAND:
+                        if (transactionInProgress()) {
+                            AddTransaction(cmd);
+                        }
+                        else {
+                            // Use
+                            executeDataCommand(cmd, PRINT_ON);
+                        }
+                        break;
+                    case TRANSACTION_COMMAND:
+                        executeTransactionCommand(cmd);
+                        break;
+                    case END_COMMAND:
+                        end();
+                        break;
+                }
+            }
+            catch (InvalidCommandException e) {
+                System.out.println("INVALID COMMAND");
+            }
+
+        }
+
+        /* A function to execute the data commands
+           The print flag is used to withold printing commands that are sent from
+           the commit operation, because the results printed would be ambiguous as to what the values
+           correspond to */
+        private void executeDataCommand(Command cmd, boolean printFlag) {
+            switch(cmd.name) {
+                case GET:
+                    String value = get(cmd.arg1);
+                    // Check the value returned from the database
+                    if (value == null) {
+                        value = "NULL";
+                    }
+                    if (printFlag) {
+                        System.out.println("> " + value);
+                    }
+                    break;
+                case UNSET:
+                    unset(cmd.arg1);
+                    break;
+                case NUMEQUALTO:
+                    int equalTo =  numEqualTo(cmd.arg1);
+                    if (printFlag) {
+                        System.out.println("> " + equalTo);
+                    }
+                    break;
+                case SET:
+                    set(cmd.arg1, cmd.arg2);
+                    break;
+            }
+        }
+
+        private void executeTransactionCommand(Command cmd) {
+            switch (cmd.name) {
+                // Run begin command
+                case BEGIN:
+                    begin();
+                    break;
+                // Run rollback command
+                case ROLLBACK:
+                    if (!rollback()) {
+                        System.out.println("> NO TRANSACTION");
+                    }
+                    break;
+                // Run Commit command
+                case COMMIT:
+                    // If commit fails, print NO TRANSACTION
+                    if (!commit()) {
+                        System.out.println("> NO TRANSACTION");
+                    }
+                    break;
+            }
         }
 
         public boolean transactionInProgress() {
@@ -273,34 +237,11 @@ public class Solution {
             return blocks.getLast().addToCache(command);
         }
 
-        // Execute the commands from the cache, without printing out the values.
-        private void executeCacheCommand(Command cmd) {
-            switch(cmd.name) {
-                case GET:
-                    get(cmd.arg1);
-                    break;
-                case UNSET:
-                    unset(cmd.arg1);
-                    break;
-                case NUMEQUALTO:
-                    numEqualTo(cmd.arg1);
-                    break;
-                case SET:
-                    set(cmd.arg1, cmd.arg2);
-                    break;
-            }
-        }
-
 
         // Add the data to the database entries.
-        private boolean set(String name, String value) {
-            try {
-                entries.put(name, value);
-                return true;
-            }
-            catch (Exception e) {
-                return false;
-            }
+        private void set(String name, String value) {
+            entries.put(name, value);
+
         }
 
         // Get the value of the key from the database
@@ -309,17 +250,9 @@ public class Solution {
         }
 
         // Remove item from database
-        private boolean unset(String name) {
-            try {
+        private void unset(String name) {
                 entries.remove(name);
-                return true;
-            }
-            catch (Exception e) {
-                return false;
-            }
-
         }
-
 
         // Find the number of items equal to the value
         private int numEqualTo(String value) {
@@ -342,41 +275,19 @@ public class Solution {
             System.exit(0);
         }
 
-        /*
-            Open a new transaction block.
-            Transaction blocks can be nested; a BEGIN can be issued inside of an existing block
-
-            Runtime: O(1)
-        */
-        private boolean begin() {
+        private void begin() {
             // If there are no transactions, create a new Transaction Block
-            try {
-                if (blocks.isEmpty()) {
-                    blocks.add(new TransactionBlock());
-                }
-                // Else, add a new transaction block to the end
-                else {
-                    blocks.addLast(new TransactionBlock());
-                }
-                return true;
+            if (blocks.isEmpty()) {
+                blocks.add(new TransactionBlock());
             }
-            // If any operation was unsuccessful, return false
-            catch (Exception E) {
-                return false;
+            // Else, add a new transaction block to the end
+            else {
+                blocks.addLast(new TransactionBlock());
             }
         }
 
-        /*
-           Close all open transaction blocks, permanently applying the changes made in them.
-           Print nothing if successful, or print "NO TRANSACTION" if no transaction is in progress.
-
-           Runtime: n = number of transaction blocks
-                    m = number of commands in the transaction blocks cache
-
-                    -> O(n * m)
-        */
         private boolean commit() {
-            // Check if there are any Transaction blocks
+            // Check if there are any Transaction blocks to commit
             if (blocks.isEmpty()) {
                 return false;
             }
@@ -388,19 +299,14 @@ public class Solution {
                     int curBlockCacheSize = curBlock.cache.size();
                     for (int i = 0; i < curBlockCacheSize; i++) {
                         Command curCommand = curBlock.cache.get(i);
-                        executeCacheCommand(curCommand);
+                        executeDataCommand(curCommand, PRINT_OFF);
                     }
                     blocks.removeFirst();
                 }
                 return true;
             }
-
         }
 
-        /*
-            Undo all of the commands issued in the most recent transaction block, and close the block.
-            Print nothing if successful, or print "NO TRANSACTION" if no transaction is in progress.
-         */
         private boolean rollback() {
             // If there are no transactions in progress, return false
             if (blocks.isEmpty()) {
@@ -414,7 +320,6 @@ public class Solution {
         }
     }
 
-    // A class for the transaction blocks.
     class TransactionBlock {
         private ArrayList<Command> cache;
 
@@ -451,18 +356,16 @@ public class Solution {
     class InvalidCommandException extends Exception {
         public InvalidCommandException() {
         }
-
-        public InvalidCommandException(String message) {
-            super(message);
-        }
     }
 
     public static void main(String args[] ) throws Exception {
         Scanner input = new Scanner(System.in);
         Solution sol = new Solution();
-        Solution.Runner r = sol.new Runner();
+        Solution.Database db = sol.new Database();
 
-        r.run();
+        while (input.hasNext()) {
+            db.evaluateCommand(input.nextLine());
+        }
 
 
     }
