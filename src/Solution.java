@@ -137,6 +137,7 @@ public class Solution {
 
         private HashMap<String, String> entries; // Variable for Database entries
         private LinkedList<TransactionBlock> blocks; // Transaction Blocks pointer
+
         private Parser parser;
 
         // Initialize database entries hashmap and Transaction Block list
@@ -153,13 +154,7 @@ public class Solution {
                 System.out.println(input);
                 switch (cmd.type) {
                     case DATA_COMMAND:
-                        if (transactionInProgress()) {
-                            AddTransaction(cmd);
-                        }
-                        else {
-                            // Use
-                            executeDataCommand(cmd, PRINT_ON);
-                        }
+                        executeDataCommand(cmd, PRINT_ON);
                         break;
                     case TRANSACTION_COMMAND:
                         executeTransactionCommand(cmd);
@@ -234,13 +229,28 @@ public class Solution {
 
         // Add the data command to the most recent Transaction Block's cache
         private boolean AddTransaction(Command command) {
-            return blocks.getLast().addToCache(command);
+            return blocks.getLast().addToJournal(command);
         }
 
 
         // Add the data to the database entries.
         private void set(String name, String value) {
-            entries.put(name, value);
+            if (transactionInProgress()) {
+                if (entries.containsKey(name)) {
+                    String oldVal = entries.get(name);
+                    Command toAdd = new Command(COMMAND_NAME.SET, COMMAND_TYPE.DATA_COMMAND, name, oldVal);
+                    blocks.getFirst().journal.add(toAdd);
+                    entries.put(name, value);
+                }
+                else {
+                    Command toAdd = new Command(COMMAND_NAME.SET, COMMAND_TYPE.DATA_COMMAND, name, "NULL");
+                    blocks.getFirst().journal.add(toAdd);
+                    entries.put(name, value);
+                }
+            }
+            else {
+                entries.put(name, value);
+            }
 
         }
 
@@ -251,7 +261,15 @@ public class Solution {
 
         // Remove item from database
         private void unset(String name) {
+            if (entries.containsKey(name) && transactionInProgress()) {
+                String oldVal = entries.get(name);
+                Command toAdd = new Command(COMMAND_NAME.SET, COMMAND_TYPE.DATA_COMMAND, name, oldVal);
+                blocks.getFirst().journal.add(toAdd);
                 entries.remove(name);
+            }
+            else {
+                entries.remove(name);
+            }
         }
 
         // Find the number of items equal to the value
@@ -282,7 +300,7 @@ public class Solution {
             }
             // Else, add a new transaction block to the end
             else {
-                blocks.addLast(new TransactionBlock());
+                blocks.addFirst(new TransactionBlock());
             }
         }
 
@@ -295,12 +313,6 @@ public class Solution {
             // Execute each command in its cache as you go (input has already been validated)
             else {
                 while (!blocks.isEmpty()) {
-                    TransactionBlock curBlock = blocks.getFirst();
-                    int curBlockCacheSize = curBlock.cache.size();
-                    for (int i = 0; i < curBlockCacheSize; i++) {
-                        Command curCommand = curBlock.cache.get(i);
-                        executeDataCommand(curCommand, PRINT_OFF);
-                    }
                     blocks.removeFirst();
                 }
                 return true;
@@ -314,22 +326,29 @@ public class Solution {
             }
             // Else, remove most recent transaction block
             else {
-                blocks.removeLast();
+                TransactionBlock curBlock = blocks.getFirst();
+                int curBlockCacheSize = curBlock.journal.size();
+                for (int i = 0; i < curBlockCacheSize; i++) {
+                    Command curCommand = curBlock.journal.get(i);
+                    executeDataCommand(curCommand, PRINT_OFF);
+                }
+
+                blocks.removeFirst();
                 return true;
             }
         }
     }
 
     class TransactionBlock {
-        private ArrayList<Command> cache;
+        private ArrayList<Command> journal;
 
         public TransactionBlock() {
-            cache = new ArrayList<>();
+            journal = new ArrayList<>();
         }
 
-        public boolean addToCache(Command command) {
+        public boolean addToJournal(Command command) {
             try {
-                cache.add(command);
+                journal.add(command);
                 return true;
             }
             catch (Exception e) {
