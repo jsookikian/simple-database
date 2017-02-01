@@ -33,9 +33,8 @@ public class Solution {
             }
 
             if (isTransactionCommand(cmd[0])) {
-                name = getTransactionCommandName(cmd[0]);
+                name = getTransactionCommandNameValue(cmd[0]);
                 type = COMMAND_TYPE.TRANSACTION_COMMAND;
-
                 return new Command(name, type, null, null);
             }
 
@@ -53,7 +52,7 @@ public class Solution {
 
         private Command parseDataCommand(String[] cmd) {
             COMMAND_TYPE type = COMMAND_TYPE.DATA_COMMAND;
-            COMMAND_NAME name = getDataCommandName(cmd[0]);
+            COMMAND_NAME name = getDataCommandNameValue(cmd[0]);
             switch(name) {
                 case SET:
                     if (cmd.length >= 3) {
@@ -87,6 +86,7 @@ public class Solution {
             }
         }
 
+
         private boolean isCommandString(String command) {
             return command.matches("\\b(SET|GET|UNSET|NUMEQUALTO|BEGIN|ROLLBACK|COMMIT|END)\\b");
         }
@@ -104,7 +104,7 @@ public class Solution {
         }
 
         // Returns the enum value for the name of the command
-        private COMMAND_NAME getTransactionCommandName(String command) {
+        private COMMAND_NAME getTransactionCommandNameValue(String command) {
             if (command.equals("BEGIN")) {
                 return COMMAND_NAME.BEGIN;
             }
@@ -117,7 +117,7 @@ public class Solution {
         }
 
         // Returns the enum value for the name of the command
-        private COMMAND_NAME getDataCommandName(String command) {
+        private COMMAND_NAME getDataCommandNameValue(String command) {
             if (command.equals("SET")) {
                 return COMMAND_NAME.SET;
             }
@@ -154,7 +154,7 @@ public class Solution {
                 System.out.println(input);
                 switch (cmd.type) {
                     case DATA_COMMAND:
-                        executeDataCommand(cmd, PRINT_ON);
+                        executeDataCommand(cmd);
                         break;
                     case TRANSACTION_COMMAND:
                         executeTransactionCommand(cmd);
@@ -174,15 +174,14 @@ public class Solution {
            The print flag is used to withold printing commands that are sent from
            the commit operation, because the results printed would be ambiguous as to what the values
            correspond to */
-        private void executeDataCommand(Command cmd, boolean printFlag) {
+        private void executeDataCommand(Command cmd) {
             switch(cmd.name) {
                 case GET:
                     String value = get(cmd.arg1);
-                    // Check the value returned from the database
                     if (value == null) {
-                        value = "NULL";
+                        System.out.println("> NULL");
                     }
-                    if (printFlag) {
+                    else {
                         System.out.println("> " + value);
                     }
                     break;
@@ -191,9 +190,7 @@ public class Solution {
                     break;
                 case NUMEQUALTO:
                     int equalTo =  numEqualTo(cmd.arg1);
-                    if (printFlag) {
-                        System.out.println("> " + equalTo);
-                    }
+                    System.out.println("> " + equalTo);
                     break;
                 case SET:
                     set(cmd.arg1, cmd.arg2);
@@ -203,17 +200,15 @@ public class Solution {
 
         private void executeTransactionCommand(Command cmd) {
             switch (cmd.name) {
-                // Run begin command
                 case BEGIN:
                     begin();
                     break;
-                // Run rollback command
                 case ROLLBACK:
+                    // If rollback fails, print NO TRANSACTION
                     if (!rollback()) {
                         System.out.println("> NO TRANSACTION");
                     }
                     break;
-                // Run Commit command
                 case COMMIT:
                     // If commit fails, print NO TRANSACTION
                     if (!commit()) {
@@ -223,7 +218,7 @@ public class Solution {
             }
         }
 
-        public boolean transactionInProgress() {
+        private boolean transactionInProgress() {
             return !blocks.isEmpty();
         }
 
@@ -231,7 +226,6 @@ public class Solution {
         private boolean AddTransaction(Command command) {
             return blocks.getLast().addToJournal(command);
         }
-
 
         // Add the data to the database entries.
         private void set(String name, String value) {
@@ -251,7 +245,6 @@ public class Solution {
             else {
                 entries.put(name, value);
             }
-
         }
 
         // Get the value of the key from the database
@@ -264,7 +257,7 @@ public class Solution {
             if (entries.containsKey(name) && transactionInProgress()) {
                 String oldVal = entries.get(name);
                 Command toAdd = new Command(COMMAND_NAME.SET, COMMAND_TYPE.DATA_COMMAND, name, oldVal);
-                blocks.getFirst().journal.add(toAdd);
+                blocks.getFirst().addToJournal(toAdd);
                 entries.remove(name);
             }
             else {
@@ -309,8 +302,7 @@ public class Solution {
             if (blocks.isEmpty()) {
                 return false;
             }
-            // Traverse the Transaction Blocks from first to last
-            // Execute each command in its cache as you go (input has already been validated)
+            // Remove all transaction blocks and commit changes permanently.
             else {
                 while (!blocks.isEmpty()) {
                     blocks.removeFirst();
@@ -320,19 +312,22 @@ public class Solution {
         }
 
         private boolean rollback() {
-            // If there are no transactions in progress, return false
+            // If there are no transactions in progress, we cannot rollback
             if (blocks.isEmpty()) {
                 return false;
             }
-            // Else, remove most recent transaction block
+            // Rollback all of the commands
             else {
+                // Get the most recent transaction block
                 TransactionBlock curBlock = blocks.getFirst();
-                int curBlockCacheSize = curBlock.journal.size();
-                for (int i = 0; i < curBlockCacheSize; i++) {
-                    Command curCommand = curBlock.journal.get(i);
-                    executeDataCommand(curCommand, PRINT_OFF);
-                }
 
+                int numCommands = curBlock.journal.size();
+                // Iterate through the commands and rollback each transaction from newest to oldest.
+                for (int i = numCommands - 1; i >= 0; i--) {
+                    Command curCommand = curBlock.journal.get(i);
+                    executeDataCommand(curCommand);
+                }
+                // Remove the block from the transaction block list.
                 blocks.removeFirst();
                 return true;
             }
@@ -340,6 +335,7 @@ public class Solution {
     }
 
     class TransactionBlock {
+        // A journal to keep track of history of commands so that we can rollback
         private ArrayList<Command> journal;
 
         public TransactionBlock() {
@@ -385,7 +381,5 @@ public class Solution {
         while (input.hasNext()) {
             db.evaluateCommand(input.nextLine());
         }
-
-
     }
 }
