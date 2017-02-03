@@ -13,7 +13,7 @@ java Database
 
 # Usage
 
-Currently the database accepts the following commands
+Currently the database accepts the following commands:
 
 
 ```SET``` ```name value```  - Set the variable name to the value value. Neither variable names nor values will contain spaces.
